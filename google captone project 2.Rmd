@@ -1,0 +1,243 @@
+---
+title: "google capstone project 2"
+author: "Md Adnan Afzal"
+date: "2024-06-20"
+output:
+  pdf_document: default
+---
+# importing library
+```{r importing library }
+library (tidyverse)
+library (dplyr)
+library (ggplot2)
+```
+
+# importing dataset
+```{r importing dataset}
+activity <- read_csv("BellaBeat fitness/mturkfitbit_export_4.12.16-5.12.16/Fitabase Data 4.12.16-5.12.16/dailyActivity_merged.csv")
+calorie <- read_csv("BellaBeat fitness/mturkfitbit_export_4.12.16-5.12.16/Fitabase Data 4.12.16-5.12.16/dailyCalories_merged.csv")
+intensity <- read_csv("BellaBeat fitness/mturkfitbit_export_4.12.16-5.12.16/Fitabase Data 4.12.16-5.12.16/dailyIntensities_merged.csv")
+step <-   read_csv("BellaBeat fitness/mturkfitbit_export_4.12.16-5.12.16/Fitabase Data 4.12.16-5.12.16/dailySteps_merged.csv")
+sleep <- read_csv("BellaBeat fitness/mturkfitbit_export_4.12.16-5.12.16/Fitabase Data 4.12.16-5.12.16/sleepDay_merged.csv")
+weight_log <-  read_csv("BellaBeat fitness/mturkfitbit_export_4.12.16-5.12.16/Fitabase Data 4.12.16-5.12.16/weightLogInfo_merged.csv")
+```
+
+# intial inspection
+```{r intial inspection}
+head(activity)
+head(calorie)
+head(intensity)
+head(step)
+head(sleep)
+head(weight_log)
+```
+# checking number of participants in each dataset
+```{r check number of participants in each dataset}
+n_distinct(activity$Id)
+n_distinct(calorie$Id)
+n_distinct(intensity$Id)
+n_distinct(step$Id)
+n_distinct(sleep$Id)
+n_distinct(weight_log$Id)
+```
+##### There were 33 participants involved in the activity, calorie, intensity, and step datasets. Then in the sleep dataset, there are 24 participants and 8 participants in the weight_log dataset.
+
+##### The number of participants in the weight_log dataset, which amounted to 8, could not be used as an analysis because a small number resulted in invalid analysis. So then, the weight_log dataset is not used.
+
+#### calorie summary 
+```{r calorie}
+calorie %>%
+   select(Calories) %>%
+   summary()
+```
+
+#### intensity summary 
+```{r intensity}
+intensity %>%
+  select(VeryActiveMinutes, FairlyActiveMinutes, LightlyActiveMinutes, SedentaryMinutes) %>%
+  summary()
+```
+
+#### total step summary 
+```{r total step}
+step %>%
+  select(StepTotal) %>%
+  summary()
+``` 
+
+#### sleep summary 
+```{r sleep}
+sleep %>%
+  select(TotalSleepRecords, TotalMinutesAsleep, TotalTimeInBed) %>%
+  summary()
+``` 
+Findings from statistics summary
+
+Calorie
+The number of calories you burn each day depends on your individual goals. To maintain your weight, you need to burn roughly the same amount of calories you consume. Without considering your specific goals, it's impossible to determine if you're burning enough calories.
+
+Intensity
+The Centers for Disease Control and Prevention (CDC) recommends at least 30 minutes of moderate-intensity exercise daily.  The data is positive, showing the participants averaged 34.72 minutes of activity (combining very active and fairly active periods). This suggests they are meeting or exceeding the CDC's recommendation.
+The average sedentary participants were 991.2 minutes or 16.52 hours. More than half of the participants spend their time with no physical activity!
+
+Step
+While the participants average 7638 daily steps, falling short of the CDC's recommended 8,000 steps for adults, a 5% daily increase would bridge the gap.
+
+Sleep
+The average participant sleeps for 7 hours a day.
+
+# processing the data(process phase)
+
+Total Steps vs. Calories correlation
+```{r,  echo=FALSE}
+cor(activity$TotalSteps, activity$Calories)
+```
+Total Steps vs. Calories visualization
+```{r,  echo=FALSE}
+ggplot (data = activity, aes(x = TotalSteps, y = Calories)) + geom_point() + labs (title = 'Total Steps vs. Calories') + geom_smooth(method = 'loess')
+```
+
+1. Calorie
+
+The analysis reveals a moderate correlation (coefficient of 0.59) between step count and calories burned. While Fitbit displays a calorie/step ratio, this offers a limited view because other factors can significantly impact calorie expenditure.
+
+# Grouping participant into four categories by Intensity Minutes for better visualization
+```{r}
+participant_type <- intensity %>% 
+  summarise(summary_participant_type = factor(case_when(
+    SedentaryMinutes > mean(SedentaryMinutes) ~ "Passive",
+    LightlyActiveMinutes > mean(LightlyActiveMinutes) ~ "Lightly Active",
+    FairlyActiveMinutes > mean(FairlyActiveMinutes) ~ "Active",
+    VeryActiveMinutes > mean(VeryActiveMinutes) ~ "Very Active",), 
+    levels = c("Passive", "Lightly Active", "Active", "Very Active")), .group=Id) %>% 
+  drop_na()
+```
+# Participant by categories percentage
+```{r, echo=FALSE}
+participant_type %>% 
+  group_by(summary_participant_type) %>% 
+  summarise (total = n()) %>% 
+  mutate (totals = sum(total)) %>% 
+  group_by(summary_participant_type) %>% 
+  summarise (TotalPercent = total / totals)
+```
+# Visualize by categories percentage
+```{r, echo=FALSE}
+participant_type %>% 
+  group_by(summary_participant_type) %>% 
+  summarise (total = n()) %>% 
+  mutate (totals = sum(total)) %>% 
+  group_by(summary_participant_type) %>% 
+  summarise (TotalPercent = total / totals) %>% 
+  ggplot(aes(summary_participant_type, y = TotalPercent, fill=summary_participant_type)) + 
+  geom_col() + 
+  labs(title = 'Participants Distribution by Active Minutes', x= 'Category') + 
+  theme(legend.position = "none") + 
+  scale_y_continuous(labels = scales::percent)
+```
+
+2. Intensity
+
+The column graph reveals significant discrepancies between participant activity levels. Notably, around 60% fall within the "Passive" category. To delve deeper into this, we'd need more granular data on participants' activities, ideally broken down by hours spent in each category.
+
+# Import hourly steps
+```{r}
+steps_hourly <- read_csv("BellaBeat fitness/mturkfitbit_export_4.12.16-5.12.16/Fitabase Data 4.12.16-5.12.16/hourlySteps_merged.csv")
+head(steps_hourly)
+```
+# Separate date and time
+```{r}
+steps_hourly$ActivityHour=as.POSIXct(steps_hourly$ActivityHour, format = "%d/%m/%Y %I:%M:%S %p", tz=Sys.timezone())
+steps_hourly$time <- format(steps_hourly$ActivityHour, format = "%H:%M:%S")
+steps_hourly$date <- format(steps_hourly$ActivityHour, format = "%m/%d/%y")
+head(steps_hourly)
+```
+# Average steps by hour
+```{r}
+steps <- steps_hourly %>% 
+  group_by(time) %>% 
+  drop_na() %>% 
+  summarise(mean_total_steps = mean(StepTotal))
+```
+# Visualize steps 
+```{r, echo=FALSE}
+ggplot(data = steps, aes(x=time, y=mean_total_steps)) + 
+  geom_histogram(stat = "identity", fill = "blue") + 
+  theme (axis.text.x = element_text(angle = 90)) +
+  labs (title = "Average Total Steps vs. Time")
+```
+
+3. Step
+
+The histogram reveals interesting patterns in participant activity throughout the day. Steps are highest in the morning around 9 AM, potentially due to commuting to work on foot. Activity picks up again during lunchtime (12 PM - 1 PM), suggesting movement during work breaks. Finally, the daily peak occurs between 5 PM and 7 PM, coinciding with the end of the workday. This evening surge likely reflects exercise routines like walking, running, or gym sessions.
+
+## Grouping participant into three categories by sleep time
+```{r}
+sleep_type <- sleep %>% 
+  summarise(summary_participant_sleep = factor(case_when(
+    TotalMinutesAsleep < 420 ~ "Need more sleep",
+    TotalMinutesAsleep >= 420 & TotalMinutesAsleep < 540 ~ "Good sleep",
+    TotalMinutesAsleep > 540 ~ "Need less sleep",),
+    levels = c("Need more sleep", "Good sleep", "Need less sleep")), .group =Id) %>% 
+  drop_na()
+```
+  
+# Participant by category percentage
+```{r}
+sleep_type %>% 
+  group_by(summary_participant_sleep) %>% 
+  summarise (total = n()) %>% 
+  mutate (totals = sum(total)) %>% 
+  group_by(summary_participant_sleep) %>% 
+  summarise (TotalPercent = total / totals)
+```
+
+# Visualize
+```{r, echo=FALSE}
+sleep_type %>% 
+  group_by(summary_participant_sleep) %>% 
+  summarise (total = n()) %>% 
+  mutate (totals = sum(total)) %>% 
+  group_by(summary_participant_sleep) %>% 
+  summarise (TotalPercent = total / totals) %>% 
+  ggplot(aes(summary_participant_sleep, y= TotalPercent, fill=summary_participant_sleep)) + 
+  geom_col() + 
+  labs(title='Participants Distribution by Sleep Time', x = 'Category') + 
+  theme(legend.position = 'none') +
+  scale_y_continuous(labels = scales::percent)
+```
+
+# Sleep Time vs. Time in Bed correlation
+```{r, echo= FALSE}
+cor(sleep$TotalTimeInBed, sleep$TotalMinutesAsleep)
+```
+
+#Sleep Time vs. Time in Bed visualization
+
+```{r}
+ggplot(data = sleep, aes(x=TotalTimeInBed, y=TotalMinutesAsleep)) + geom_point() + 
+  labs(title = 'Total Time in Bed vs. Total Minutes Sleep') + geom_smooth()
+```
+
+4. Sleep
+
+While both the CDC (at least 7 hours) and Sleepfoundation.org (less than 9 hours) recommend optimal sleep ranges for adults, only 46% of participants appear to be achieving this based on the data. To improve sleep habits, implementing a sleep reminder notification and built-in alarm features could be valuable additions to engage users.
+
+The analysis reveals a strong correlation (r = 0.93) between total time in bed and total sleep minutes. However, some participants show a significant difference between these two measures. Highlighting this data for users could be beneficial. For example, users with a pattern of large discrepancies between time in bed and sleep duration could be prompted to utilize the "Reminder to Go to Sleep" feature if they're aiming to increase their total sleep time.
+
+
+# Recommendation¶
+
+Fitbit's data offers valuable insights into user activity levels, but some limitations exist. To get a complete picture of calorie expenditure, users need to track their daily calorie intake as well. Fitbit could integrate a food/drink logging feature with average calorie information to address this.
+
+The data also reveals an average of 16.5 hours of sedentary time per day. To encourage movement, Fitbit could implement gentle reminder nudges throughout the day. However, these reminders shouldn't disrupt work. To achieve this, Fitbit could introduce a customizable "Work Time" setting where reminders are paused
+
+While average daily steps fall short of the CDC's recommended 8,000, Fitbit's "Goal Level" feature can help users bridge the gap. This feature provides tiered daily step goals, like Passive (2,500 steps), Lightly Active (5,000 steps), and Active (at least 8,000 steps). When users consistently surpass a level, Fitbit can suggest a "level up" to the next challenge, nudging them to gradually increase their daily steps and become more active.
+
+The data highlights that over half of participants are falling short of recommended sleep durations. Additionally, some individuals show a considerable discrepancy between time spent in bed and actual sleep time. To address these findings, Fitbit could:
+
+-Display daily sleep totals upon waking: This would provide users with immediate feedback on their sleep performance.
+
+-Utilize sleep reminders: Users aiming to increase sleep duration could leverage customizable bedtime reminders.
+
+-Leverage smart alarms: For those seeking to achieve a specific sleep target, integrating alarms that trigger upon reaching that desired sleep duration could be beneficial.
